@@ -1,6 +1,12 @@
 import uuid
 import aiohttp
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+class CannotConnect(RuntimeError):
+    """Error to indicate we cannot connect."""
+
+class InvalidCredentials(CannotConnect):
+    """Error to indicate we cannot connect because of bad credentials."""
 
 class TPLinkCloud:
     def __init__(self):
@@ -8,6 +14,23 @@ class TPLinkCloud:
         self.username: Optional[str] = None
         self.password: Optional[str] = None
         self.token: Optional[str] = None
+
+    async def _request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        payload = {
+            "method": method,
+            "params": params,
+        }
+        async with self.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
+            resp.raise_for_status()
+            body = await resp.json()
+
+            if (error_code := body.get("error_code", 0)) != 0:
+                error_msg = body.get("msg", "Unknown error")
+                if error_code == -20601:
+                    raise InvalidCredentials(f"{error_msg} ({error_code})")
+                else:
+                    raise CannotConnect(f"{error_msg} ({error_code})")
+            return body["result"]
         
     async def login(self, username: str, password: str) -> "TPLinkCloud":
         self.username = username
@@ -16,31 +39,19 @@ class TPLinkCloud:
         return self
         
     async def refresh_token(self):
-        payload = {
-            "method": "login",
-            "params": {
-                "appType": "Kasa_Android",
-                "cloudUserName": self.username,
-                "cloudPassword": self.password,
-                "terminalUUID": str(uuid.uuid4()),
-            }
-        }
-        async with self.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
-            resp.raise_for_status()
-            body = await resp.json()
-            self.token = body["result"]["token"]
+        result = await self._request("login", {
+            "appType": "Kasa_Android",
+            "cloudUserName": self.username,
+            "cloudPassword": self.password,
+            "terminalUUID": str(uuid.uuid4()),
+        })
+        self.token = result["token"]
         
     async def list_devices(self) -> List["TPLinkDevice"]:
-        payload = {
-            "method": "getDeviceList",
-            "params": {
-                "token": self.token,
-            }
-        }
-        async with self.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
-            resp.raise_for_status()
-            body = await resp.json()
-            devices = body["result"]["deviceList"]
+        result = await self._request("getDeviceList", {
+            "token": self.token,
+        })
+        devices = result["deviceList"]
 
         return [TPLinkDevice(
             cloud=self,
@@ -68,22 +79,16 @@ class TPLinkDevice:
         self._state = state
         
     async def refresh(self):
-        payload = {
-            "method": "passthrough",
-            "params": {
-                "deviceId": self.device_id,
-                "requestData": {
-                    "system": {
-                        "get_sysinfo": None,
-                    },
+        result = await self.cloud._request("passthrough", {
+            "deviceId": self.device_id,
+            "requestData": {
+                "system": {
+                    "get_sysinfo": None,
                 },
-                "token": self.cloud.token
-            }
-        }
-        async with self.cloud.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
-            resp.raise_for_status()
-            body = await resp.json()
-            device = body["result"]["responseData"]["system"]["get_sysinfo"]
+            },
+            "token": self.cloud.token
+        })
+        device = result["responseData"]["system"]["get_sysinfo"]
 
         self.setup(
             device_id=device["deviceId"],
@@ -100,21 +105,15 @@ class TPLinkDevice:
         return self._state
         
     async def set_state(self, state):
-        payload = {
-            "method": "passthrough",
-            "params": {
-                "deviceId": self.device_id,
-                "requestData": {
-                    "system": {
-                        "set_relay_state": {
-                            "state": state
-                        }
+        await self.cloud._request("passthrough", {
+            "deviceId": self.device_id,
+            "requestData": {
+                "system": {
+                    "set_relay_state": {
+                        "state": state
                     }
-                },
-                "token": self.cloud.token,
-            }
-        }
-        async with self.cloud.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
-            resp.raise_for_status()
-
+                }
+            },
+            "token": self.cloud.token,
+        })
         self._state = state
