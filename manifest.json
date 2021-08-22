@@ -1,0 +1,13 @@
+{
+    "domain": "tp_link_cloud",
+    "name": "TP-Link Cloud",
+    "version": "1.0.0",
+    "config_flow": true,
+    "documentation": "",
+    "dependencies": [],
+    "codeowners": [
+      "@jedevc"
+    ],
+    "requirements": [],
+    "iot_class": "cloud_polling"
+}
