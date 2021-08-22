@@ -28,7 +28,6 @@ class TPLinkCloud:
         async with self.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
             resp.raise_for_status()
             body = await resp.json()
-            print(body)
             self.token = body["result"]["token"]
         
     async def list_devices(self) -> List["TPLinkDevice"]:
@@ -50,6 +49,7 @@ class TPLinkCloud:
             alias=device["alias"],
             model=device["deviceModel"],
             name=device["deviceName"],
+            software=device["fwVer"],
             state=device["status"],
         ) for device in devices]
     
@@ -58,12 +58,13 @@ class TPLinkDevice:
         self.cloud = cloud
         self.setup(*args, **kwargs)
 
-    def setup(self, device_id: str, device_type: str, alias: str, model: str, name: str, state: int = 0):
+    def setup(self, device_id: str, device_type: str, alias: str, model: str, name: str, software: str, state: int = 0):
         self.device_id = device_id
         self.device_type = device_type
         self.alias = alias
         self.model = model
         self.name = name
+        self.software = software
         self._state = state
         
     async def refresh(self):
@@ -90,6 +91,7 @@ class TPLinkDevice:
             alias=device["alias"],
             model=device["model"],
             name=''.join(device["dev_name"]),
+            software=''.join(device["sw_ver"]),
             state=device["relay_state"],
         )
         

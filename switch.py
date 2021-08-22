@@ -44,6 +44,17 @@ class TPLinkSwitch(SwitchEntity):
         """If the switch is currently on or off."""
         return self.device.state != 0
 
+    @property
+    def device_info(self):
+        """Get device info"""
+        return {
+            "identifiers": {(DOMAIN, self.unique_id)},
+            "name": self.name,
+            "manufacturer": "TP-Link",
+            "model": self.device.model,
+            "sw_version": self.device.software,
+        }
+
     async def async_turn_on(self, **kwargs):
         """Turn the switch on."""
         await self.device.set_state(1)
