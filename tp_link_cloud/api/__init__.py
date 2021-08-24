@@ -37,11 +37,10 @@ class TPLinkCloud:
 
             if (error_code := body.get("error_code", 0)) != 0:
                 error_msg = body.get("msg", "Unknown error")
-                
                 err = {
                     -20601: InvalidCredentials,
                     -20651: ExpiredToken,
-                }.get(CannotConnect)
+                }.get(error_code, CannotConnect)
                 raise err(f"{error_msg} ({error_code})")
             return body["result"]
 
