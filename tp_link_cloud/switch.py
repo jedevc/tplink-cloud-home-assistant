@@ -2,6 +2,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.components.switch import SwitchEntity
+from typing import Any, Dict
 
 from . import api
 from .const import DOMAIN
@@ -9,25 +10,37 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities):
-    config = hass.data[DOMAIN][config_entry.entry_id]
-    email = config["email"]
-    password = config["password"]
+    config_data = hass.data[DOMAIN][config_entry.entry_id]
 
-    cloud = await api.TPLinkCloud().login(email, password)
-    switches = [TPLinkSwitch(device) for device in await cloud.list_devices()]
+    email = config_data["email"]
+    password = config_data["password"]
+    token = config_data["token"]
+
+    cloud = await api.TPLinkCloud(email, password).token(token)
+    try:
+        devices = await cloud.list_devices()
+    except api.ExpiredToken:
+        await _async_new_tokens(hass, cloud, config_entry)
+        devices = await cloud.list_devices()
+    switches = [TPLinkSwitch(device, config_entry) for device in devices]
     async_add_entities(switches)
 
 
 class TPLinkSwitch(SwitchEntity):
-    def __init__(self, device: api.TPLinkDevice):
+    def __init__(self, device: api.TPLinkDevice, config: ConfigEntry):
         self.device = device
+        self.config = config
 
     @property
     def should_poll(self) -> bool:
         return True
-        
+    
     async def async_update(self):
-        await self.device.refresh()
+        try:
+            await self.device.refresh()
+        except api.ExpiredToken:
+            await _async_new_tokens(self.hass, self.device.cloud, self.config)
+            await self.device.set_state(0)
 
     @property
     def name(self) -> str:
@@ -57,8 +70,24 @@ class TPLinkSwitch(SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         """Turn the switch on."""
-        await self.device.set_state(1)
+        try:
+            await self.device.set_state(1)
+        except api.ExpiredToken:
+            await _async_new_tokens(self.hass, self.device.cloud, self.config)
+            await self.device.set_state(1)
 
     async def async_turn_off(self, **kwargs):
         """Turn the switch off."""
-        await self.device.set_state(0)
+        try:
+            await self.device.set_state(0)
+        except api.ExpiredToken:
+            await _async_new_tokens(self.hass, self.device.cloud, self.config)
+            await self.device.set_state(0)
+
+async def _async_new_tokens(hass: HomeAssistant, cloud: api.TPLinkCloud, config: ConfigEntry):
+    cloud.login()
+    await hass.config_entries.async_update_entry(config, data={
+        **config.data,
+        "token": cloud.get_token(),
+    })
+    

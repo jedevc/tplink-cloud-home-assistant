@@ -1,4 +1,5 @@
 import uuid
+import json
 import aiohttp
 from typing import Any, Dict, List, Optional
 
@@ -8,49 +9,64 @@ class CannotConnect(RuntimeError):
 class InvalidCredentials(CannotConnect):
     """Error to indicate we cannot connect because of bad credentials."""
 
-class TPLinkCloud:
-    def __init__(self):
-        self.session = aiohttp.ClientSession()
-        self.username: Optional[str] = None
-        self.password: Optional[str] = None
-        self.token: Optional[str] = None
+class ExpiredToken(CannotConnect):
+    """Error to indicate we cannot connect because of an expired token."""
 
-    async def _request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+class TPLinkCloud:
+    def __init__(self, username: str, password: str):
+        self.session = aiohttp.ClientSession()
+        self.username = username
+        self.password = password
+        self._token: Optional[str] = None
+
+    async def _request(self, method: str, params: Dict[str, Any], attach_token: bool = True) -> Dict[str, Any]:
+        headers = {
+            'content-type': 'application/json',
+            'accept': 'application/json'
+        }
         payload = {
             "method": method,
             "params": params,
         }
-        async with self.session.post("https://wap.tplinkcloud.com", json=payload) as resp:
+        url = "https://wap.tplinkcloud.com"
+        if attach_token:
+            url += f"?token={self._token}"
+        async with self.session.post(url, headers=headers, json=payload) as resp:
             resp.raise_for_status()
             body = await resp.json()
 
             if (error_code := body.get("error_code", 0)) != 0:
                 error_msg = body.get("msg", "Unknown error")
-                if error_code == -20601:
-                    raise InvalidCredentials(f"{error_msg} ({error_code})")
-                else:
-                    raise CannotConnect(f"{error_msg} ({error_code})")
+                
+                err = {
+                    -20601: InvalidCredentials,
+                    -20651: ExpiredToken,
+                }.get(CannotConnect)
+                raise err(f"{error_msg} ({error_code})")
             return body["result"]
-        
-    async def login(self, username: str, password: str) -> "TPLinkCloud":
-        self.username = username
-        self.password = password
-        await self.refresh_token()
+
+    async def token(self, token: str) -> "TPLinkCloud":
+        self._token = token
         return self
         
-    async def refresh_token(self):
+    def get_token(self) -> str:
+        return self._token
+        
+    async def refresh_token(self) -> "TPLinkCloud":
         result = await self._request("login", {
             "appType": "Kasa_Android",
             "cloudUserName": self.username,
             "cloudPassword": self.password,
             "terminalUUID": str(uuid.uuid4()),
-        })
-        self.token = result["token"]
+        }, attach_token=False)
+        self._token = result["token"]
+        return self
+
+    async def login(self) -> "TPLinkCloud":
+        return await self.refresh_token()
         
     async def list_devices(self) -> List["TPLinkDevice"]:
-        result = await self._request("getDeviceList", {
-            "token": self.token,
-        })
+        result = await self._request("getDeviceList", {})
         devices = result["deviceList"]
 
         return [TPLinkDevice(
@@ -81,18 +97,18 @@ class TPLinkDevice:
     async def refresh(self):
         result = await self.cloud._request("passthrough", {
             "deviceId": self.device_id,
-            "requestData": {
+            "requestData": json.dumps({
                 "system": {
                     "get_sysinfo": None,
                 },
-            },
-            "token": self.cloud.token
+            }),
         })
-        device = result["responseData"]["system"]["get_sysinfo"]
+        data = json.loads(result["responseData"])
+        device = data["system"]["get_sysinfo"]
 
         self.setup(
             device_id=device["deviceId"],
-            device_type=device["mic_type"],
+            device_type=device.get("type", device.get("mic_type", None)),
             alias=device["alias"],
             model=device["model"],
             name=''.join(device["dev_name"]),
@@ -107,13 +123,12 @@ class TPLinkDevice:
     async def set_state(self, state):
         await self.cloud._request("passthrough", {
             "deviceId": self.device_id,
-            "requestData": {
+            "requestData": json.dumps({
                 "system": {
                     "set_relay_state": {
                         "state": state
                     }
                 }
-            },
-            "token": self.cloud.token,
+            }),
         })
         self._state = state
