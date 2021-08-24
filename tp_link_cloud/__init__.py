@@ -2,6 +2,7 @@ from .const import DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
@@ -12,6 +13,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_forward_entry_setup(entry, "switch")
     )
     return True
+
 
 async def options_update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
     """Handle options update."""

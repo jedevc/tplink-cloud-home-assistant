@@ -9,7 +9,10 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities):
+
+async def async_setup_entry(
+    hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities
+):
     config_data = hass.data[DOMAIN][config_entry.entry_id]
 
     email = config_data["email"]
@@ -34,7 +37,7 @@ class TPLinkSwitch(SwitchEntity):
     @property
     def should_poll(self) -> bool:
         return True
-    
+
     async def async_update(self):
         try:
             await self.device.refresh()
@@ -84,10 +87,15 @@ class TPLinkSwitch(SwitchEntity):
             await _async_new_tokens(self.hass, self.device.cloud, self.config)
             await self.device.set_state(0)
 
-async def _async_new_tokens(hass: HomeAssistant, cloud: api.TPLinkCloud, config: ConfigEntry):
+
+async def _async_new_tokens(
+    hass: HomeAssistant, cloud: api.TPLinkCloud, config: ConfigEntry
+):
     cloud.login()
-    await hass.config_entries.async_update_entry(config, data={
-        **config.data,
-        "token": cloud.get_token(),
-    })
-    
+    await hass.config_entries.async_update_entry(
+        config,
+        data={
+            **config.data,
+            "token": cloud.get_token(),
+        },
+    )

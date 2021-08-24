@@ -12,6 +12,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
@@ -25,7 +26,9 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self.form = user_input
             try:
-                cloud = await api.TPLinkCloud(self.form["email"], self.form["password"]).login()
+                cloud = await api.TPLinkCloud(
+                    self.form["email"], self.form["password"]
+                ).login()
             except api.InvalidCredentials:
                 errors["base"] = "invalid_credentials"
             except api.CannotConnect:
@@ -39,8 +42,12 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Required("email", default=self.form.get("email", vol.UNDEFINED)): str,
-                vol.Required("password", default=self.form.get("password", vol.UNDEFINED)): str,
+                vol.Required(
+                    "email", default=self.form.get("email", vol.UNDEFINED)
+                ): str,
+                vol.Required(
+                    "password", default=self.form.get("password", vol.UNDEFINED)
+                ): str,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
