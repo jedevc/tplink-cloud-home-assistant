@@ -25,8 +25,10 @@ async def async_setup_entry(
     except api.ExpiredToken:
         await _async_new_tokens(hass, cloud, config_entry)
         devices = await cloud.list_devices()
+    except:
+        _LOGGER.exception("Unexpected exception")
     switches = [TPLinkSwitch(device, config_entry) for device in devices]
-    async_add_entities(switches)
+    async_add_entities(switches, update_before_add=True)
 
 
 class TPLinkSwitch(SwitchEntity):
@@ -43,7 +45,9 @@ class TPLinkSwitch(SwitchEntity):
             await self.device.refresh()
         except api.ExpiredToken:
             await _async_new_tokens(self.hass, self.device.cloud, self.config)
-            await self.device.set_state(0)
+            await self.device.refresh()
+        except:
+            _LOGGER.exception("Unexpected exception")
 
     @property
     def name(self) -> str:
@@ -78,6 +82,8 @@ class TPLinkSwitch(SwitchEntity):
         except api.ExpiredToken:
             await _async_new_tokens(self.hass, self.device.cloud, self.config)
             await self.device.set_state(1)
+        except:
+            _LOGGER.exception("Unexpected exception")
 
     async def async_turn_off(self, **kwargs):
         """Turn the switch off."""
@@ -86,6 +92,8 @@ class TPLinkSwitch(SwitchEntity):
         except api.ExpiredToken:
             await _async_new_tokens(self.hass, self.device.cloud, self.config)
             await self.device.set_state(0)
+        except:
+            _LOGGER.exception("Unexpected exception")
 
 
 async def _async_new_tokens(
