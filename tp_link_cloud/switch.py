@@ -27,6 +27,7 @@ async def async_setup_entry(
         devices = await cloud.list_devices()
     except:
         _LOGGER.exception("Unexpected exception")
+        return
     switches = [TPLinkSwitch(device, config_entry) for device in devices]
     async_add_entities(switches, update_before_add=True)
 
