@@ -100,7 +100,7 @@ class TPLinkSwitch(SwitchEntity):
 async def _async_new_tokens(
     hass: HomeAssistant, cloud: api.TPLinkCloud, config: ConfigEntry
 ):
-    cloud.login()
+    await cloud.login()
     await hass.config_entries.async_update_entry(
         config,
         data={
